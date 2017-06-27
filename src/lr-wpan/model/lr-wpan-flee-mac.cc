@@ -93,7 +93,8 @@ namespace ns3 {
 			// configure default CSMA MAC layer
 			LrWpanMac::DoInitialize ();
 		}
-	
+
+	//Intercepting functions
 	void
 		LrWpanFleeMac::SetMcpsDataIndicationCallback (McpsDataIndicationCallback c)
 		{
@@ -159,7 +160,8 @@ namespace ns3 {
 				//if not broadcast just pass this request
 					LrWpanMac::McpsDataRequest (params,p);
 		}
-  
+ 
+	//Passing ACK from MAC to netdevice
 	void LrWpanFleeMac::McpsDataConfirm (McpsDataConfirmParams params)
 	{
 		// Check the current packet being transmitted
@@ -239,6 +241,10 @@ namespace ns3 {
 			m_timer.Schedule();
 		}
 
+
+	/*
+	   Schedule slots in the entire timer duration based on the received packets.
+	   */
 	void 
 		LrWpanFleeMac::ScheduleSlots (void)
 		{
