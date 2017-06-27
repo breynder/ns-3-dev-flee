@@ -110,20 +110,24 @@ FleeRouting::PrintRoutingTable (Ptr<OutputStreamWrapper> stream) const
   std::ostream* os = stream->GetStream ();
 
   *os << "Node: " << m_ipv6->GetObject<Node> ()->GetId ()
+	//std::cout << "Node: " << m_ipv6->GetObject<Node> ()->GetId ()
       << ", Time: " << Now().As (Time::S)
       << ", Local time: " << GetObject<Node> ()->GetLocalTime ().As (Time::S)
       << ", FleeRouting table" << std::endl;
 
   if (GetNRoutes () > 0)
     {
+			//std::cout << "Destination                    Next Hop                   Flag Met Ref Use If" << std::endl;
       *os << "Destination                    Next Hop                   Flag Met Ref Use If" << std::endl;
       for (uint32_t j = 0; j < GetNRoutes (); j++)
         {
           std::ostringstream dest, gw, mask, flags;
           Ipv6RoutingTableEntry route = GetRoute (j);
           dest << route.GetDest () << "/" << int(route.GetDestNetworkPrefix ().GetPrefixLength ());
+					//std::cout << std::setiosflags (std::ios::left) << std::setw (31) << dest.str ();
           *os << std::setiosflags (std::ios::left) << std::setw (31) << dest.str ();
           gw << route.GetGateway ();
+					//std::cout << std::setiosflags (std::ios::left) << std::setw (27) << gw.str ();
           *os << std::setiosflags (std::ios::left) << std::setw (27) << gw.str ();
           flags << "U";
           if (route.IsHost ())
@@ -134,24 +138,32 @@ FleeRouting::PrintRoutingTable (Ptr<OutputStreamWrapper> stream) const
             {
               flags << "G";
             }
+					//std::cout << std::setiosflags (std::ios::left) << std::setw (5) << flags.str ();
+					//std::cout << std::setiosflags (std::ios::left) << std::setw (4) << GetMetric (j);
           *os << std::setiosflags (std::ios::left) << std::setw (5) << flags.str ();
           *os << std::setiosflags (std::ios::left) << std::setw (4) << GetMetric (j);
           // Ref ct not implemented
-          *os << "-" << "   ";
+					//std::cout << "-" << "   ";
+					*os << "-" << "   ";
           // Use not implemented
           *os << "-" << "   ";
+					//std::cout << "-" << "   ";
           if (Names::FindName (m_ipv6->GetNetDevice (route.GetInterface ())) != "")
             {
               *os << Names::FindName (m_ipv6->GetNetDevice (route.GetInterface ()));
+							//std::cout << Names::FindName (m_ipv6->GetNetDevice (route.GetInterface ()));
             }
           else
             {
               *os << route.GetInterface ();
+							//std::cout << route.GetInterface ();
             }
           *os << std::endl;
+					//std::cout << std::endl;
         }
     }
   *os << std::endl;
+	//std::cout << std::endl;
 }
 
 void FleeRouting::AddHostRouteTo (Ipv6Address dst, Ipv6Address nextHop, uint32_t interface, Ipv6Address prefixToUse, uint32_t metric)
@@ -242,7 +254,7 @@ Ptr<Ipv6Route> FleeRouting::LookupStatic (Ipv6Address dst, Ptr<NetDevice> interf
       uint16_t maskLen = mask.GetPrefixLength ();
       Ipv6Address entry = j->GetDestNetwork ();
 
-      NS_LOG_LOGIC ("Searching for route to " << dst << ", mask length " << maskLen << ", metric " << metric);
+      NS_LOG_LOGIC ("Searching for route to " << dst << ", mask length " << maskLen << ", metric " << metric << " " << entry);
 
       if (mask.IsMatch (dst, entry))
         {
@@ -659,7 +671,7 @@ FleeRouting::Hello (void)
 		j->first->SendTo(pkt,0,Inet6SocketAddress(destination,FLEE_PORT));
 	}
 	if (m_distanceToSink == 0)
-		Simulator::Schedule (Seconds(5), &FleeRouting::Hello, this);
+		Simulator::Schedule (Simulator::Now(), &FleeRouting::Hello, this);
 }
 
 void 
@@ -670,34 +682,41 @@ FleeRouting::RecvFlee (Ptr<Socket> socket)
 	// Read all messages from the current socket
 	while (pkt = socket->RecvFrom(address))
 	{
-		uint8_t payload[1];
-		pkt->CopyData(payload,1);
-		NS_LOG_DEBUG ("We can see a device " << payload[1] << "hops away from the sink");
-		m_distanceToSink = std::min (payload[1]+1,m_distanceToSink);
-		// check if the address is a ipv6 socket address
-		if (Inet6SocketAddress::IsMatchingType (address))
+		if (pkt->GetSize()==1)
 		{
-			// convert it and get IPv6 address
-			Ipv6Address add = Inet6SocketAddress::ConvertFrom (address).GetIpv6 ();
-			// if we do not have a route yet, ...
-			if (!HasNetworkDest (add, m_ipv6->GetInterfaceForDevice(socket->GetBoundNetDevice ())))
+			uint8_t payload[1];
+			pkt->CopyData(payload,1);
+			NS_LOG_DEBUG ("We can see a device " << (uint32_t)payload[0] << "hops away from the sink");
+			if (payload[0]+1<m_distanceToSink)
 			{
-				// ... add the address to our list, ...
-				AddHostRouteTo (add, m_ipv6->GetInterfaceForDevice (socket->GetBoundNetDevice ())); 
-				// ... and send a message back to finalize.
-				Simulator::ScheduleNow (&FleeRouting::SendHelloResp,this,socket,Create<Packet> (9), 0, Inet6SocketAddress (add,FLEE_PORT));
-				// Broadcast the new message.
-				Simulator::Schedule (MilliSeconds (100),&FleeRouting::Hello, this);
+				m_distanceToSink = std::min ((uint8_t)(payload[0]+1),m_distanceToSink);
+				// check if the address is a ipv6 socket address
+				if (Inet6SocketAddress::IsMatchingType (address))
+				{
+					// convert it and get IPv6 address
+					Ipv6Address add = Inet6SocketAddress::ConvertFrom (address).GetIpv6 ();
+					// if we do not have a route yet, ...
+					if (!HasNetworkDest (add, m_ipv6->GetInterfaceForDevice(socket->GetBoundNetDevice ())))
+					{
+						// ... add the address to our list, ...
+						AddHostRouteTo (add, add, m_ipv6->GetInterfaceForDevice (socket->GetBoundNetDevice ())); 
+						// ... and send a message back to finalize.
+						Simulator::ScheduleNow (&FleeRouting::SendHelloResp,this,socket,Create<Packet> (9), 0, Inet6SocketAddress (add,FLEE_PORT));
+						// Broadcast the new message.
+						NS_LOG_DEBUG ("Rebroadcast hello message");
+						Simulator::Schedule (MilliSeconds (100),&FleeRouting::Hello, this);
+					}
+				}
 			}
 		}
 	}
 }
 
-void 
+	void 
 FleeRouting::SendHelloResp (Ptr<Socket> socket, Ptr<Packet> pkt, uint8_t flags, Address address)
 {
-  for (std::map<Ptr<Socket>, Ipv6InterfaceAddress>::const_iterator j =
-         m_socketAddresses.begin (); j != m_socketAddresses.end (); ++j)
+	for (std::map<Ptr<Socket>, Ipv6InterfaceAddress>::const_iterator j =
+			m_socketAddresses.begin (); j != m_socketAddresses.end (); ++j)
 	{
 		if (socket->GetBoundNetDevice() == j->first->GetBoundNetDevice ())
 		{

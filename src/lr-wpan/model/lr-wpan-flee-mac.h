@@ -27,6 +27,8 @@
 #include <ns3/lr-wpan-mac.h>
 #include <ns3/lr-wpan-phy.h>
 #include <ns3/timer.h>
+#include <ns3/watchdog.h>
+#include <map>
 
 
 namespace ns3 {
@@ -56,6 +58,10 @@ class UniformRandomVariable;
 class LrWpanFleeMac : public LrWpanMac
 {
 public:
+	// set the broadcast channel;
+	void SetBroadcastChannel (uint8_t channel);
+	// typedef for our database 
+	typedef std::tuple <uint8_t, double, uint8_t, bool,bool, Watchdog*> LinkSpecs;
   /**
    * Get the type ID.
    *
@@ -68,37 +74,61 @@ public:
    */
   LrWpanFleeMac (void);
   ~LrWpanFleeMac (void);
+	// finidsh constructing object
 	void DoInitialize ();
+	// overwrite of deleting elements
   void RemoveFirstTxQElement ();
+	// get request for parameters of the PHY layer
   void PlmeGetAttributeConfirm (LrWpanPhyEnumeration status,
                                 LrWpanPibAttributeIdentifier id,
                                 LrWpanPhyPibAttributes* attribute);
+	// interception of request going to the default MAC Layer
   void McpsDataRequest (McpsDataRequestParams params, Ptr<Packet> p);
+
+	// setters of callback functions (see also lr-wpan MAC)
   void SetMcpsDataIndicationCallback (McpsDataIndicationCallback c);
+  void SetMcpsDataConfirmCallback (McpsDataConfirmCallback c);
+	/**
+		* Indicates the start of an MPDU at PHY (receiving)
+		*/
+  void PdDataStartNotion (void);
 private:
+	// current channel
 	uint8_t m_channelNumber;
+	// time out receiving if there is no packety to receive
 	void RxTimeOut (void);
+	// check queue overwrite
   void CheckQueue (void);
+	// overwrite of function to say there is data
   void McpsDataIndication (McpsDataIndicationParams params, Ptr<Packet> pkt);
+	// overwrite of function to say data has been successfully transmitted
+  void McpsDataConfirm (McpsDataConfirmParams params);
+	// callback variables
   McpsDataIndicationCallback m_mcpsDataIndicationCallback;
+	McpsDataConfirmCallback m_mcpsDataConfirmCallback;
 
 	// list of all connectable devices with
-	// address, channel, time offset on our timer and amount of missed connections
-	std::list<std::tuple <Address, uint8_t, double, uint8_t> > m_connectable;
+	// address, channel, time offset on our timer, amount of missed connections, if connected, in TX
+	std::map<Address, LinkSpecs > m_connectable;
 
 	// timer for the clock, at this clock, devices can connect to different devices 
 	// time is in miliseconds.
 	double m_timerLength;
 	Timer m_timer;
-	// defines if this cycle is RX or TX
-	bool m_RXTX; 
 	// defines if this device is a sink. That one gets less receive slots...
 	bool m_sink; 
+	// boolean to suppress transmissions for one cycle
+	bool m_canTx;
 	// how often the device broadcasts with a broadcast message
 	double m_broadcastInterval;
 	// next broadcast channel
 	uint8_t m_broadcastChannel;
+	// channel to listen on
 	uint8_t m_listenChannel;
+	// start of latest received message.
+	Time m_latestStart;
+	// random variable
+	Ptr<UniformRandomVariable> m_var;
 	// Reset the timer.
 	void EndTimer (void);
 	// Schedule the slots in this rotation based on neighbours
@@ -106,10 +136,11 @@ private:
 	// amount of neighbours
 	uint8_t m_neighbours;
 	// Schedule a transmission for either reception or transmission.
-	void ScheduleSlot (const Address& addr, bool RXTX, uint8_t channel);
-
-	Ptr<UniformRandomVariable> m_var;
-
+	void ScheduleSlot (const Address& addr);
+	// if the request is not acked, remove the connection, because something went wrong.
+	void PruneConnection (const Address& addr);
+	// incremement the channel of broadcast 
+	void IncrementBroadcastChannel (void);
 };
 
 

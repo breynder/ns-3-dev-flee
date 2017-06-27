@@ -208,6 +208,7 @@ LrWpanHelper::InstallFlee (NodeContainer c)
       netDevice->SetChannel (m_channel);
       node->AddDevice (netDevice);
       netDevice->SetNode (node);
+			netDevice->GetPhy()->SetPdDataStartNotionCallback (MakeCallback (&LrWpanFleeMac::PdDataStartNotion, fleemac));
       // \todo add the capability to change short address, extended
       // address and panId. Right now they are hardcoded in LrWpanMac::LrWpanMac ()
       devices.Add (netDevice);
